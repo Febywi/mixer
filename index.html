@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DLMS Mixer — Digital Sound System Processor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- Start overlay (needed to unlock AudioContext on user gesture) -->
+  <div id="startOverlay" class="overlay">
+    <div class="overlay-card">
+      <div class="overlay-logo">
+        <span class="dot dot-sub"></span><span class="dot dot-low"></span>
+        <span class="dot dot-mid"></span><span class="dot dot-high"></span>
+      </div>
+      <h1>DLMS&nbsp;MIXER</h1>
+      <p>Digital Loudspeaker Management &amp; Mixer — real-time, in your browser.</p>
+      <button id="startBtn" class="btn btn-primary btn-lg">⏻ MASUK / START ENGINE</button>
+      <p class="overlay-hint">100% gratis · jalan di browser · Web Audio API</p>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <!-- ===================== TOP BAR ===================== -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">
+          <span class="dot dot-sub"></span><span class="dot dot-low"></span>
+          <span class="dot dot-mid"></span><span class="dot dot-high"></span>
+        </div>
+        <div class="brand-text">
+          <strong>DLMS&nbsp;MIXER</strong>
+          <small>sound system processor</small>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button id="playAll" class="btn" title="Play semua track">▶ PLAY</button>
+        <button id="pauseAll" class="btn" title="Pause">⏸ PAUSE</button>
+        <button id="stopAll" class="btn" title="Stop">⏹ STOP</button>
+      </div>
+
+      <div class="master">
+        <div class="master-knob">
+          <label>MASTER</label>
+          <input id="masterGain" type="range" min="-40" max="6" step="0.5" value="0" />
+          <output id="masterGainVal">0.0 dB</output>
+        </div>
+        <div class="master-knob">
+          <label>LIMITER</label>
+          <input id="masterLimiter" type="range" min="-12" max="0" step="0.5" value="-1" />
+          <output id="masterLimiterVal">-1.0 dB</output>
+        </div>
+        <div class="master-vu">
+          <canvas id="masterVuL"></canvas>
+          <canvas id="masterVuR"></canvas>
+          <span class="vu-label">OUT</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <!-- ===================== LEFT: SOURCES ===================== -->
+      <section class="panel sources">
+        <div class="panel-head">
+          <h2>🎵 SOURCES</h2>
+          <div class="src-actions">
+            <label class="btn btn-sm" for="fileInput">＋ Lagu</label>
+            <input id="fileInput" type="file" accept="audio/*" multiple hidden />
+            <button id="addMic" class="btn btn-sm">🎙 Mic/Line</button>
+          </div>
+        </div>
+        <div id="trackList" class="track-list">
+          <div class="empty-hint">Belum ada lagu. Klik <b>＋ Lagu</b> untuk upload (bisa banyak sekaligus / multi-track).</div>
+        </div>
+      </section>
+
+      <!-- ===================== CENTER: ANALYZER + GEQ ===================== -->
+      <section class="panel analyzer-panel">
+        <div class="panel-head">
+          <h2>📊 SPECTRUM ANALYZER</h2>
+          <div class="vocal-remover">
+            <label>🎤 VOCAL REMOVER</label>
+            <input id="vocalAmount" type="range" min="0" max="100" step="1" value="0" />
+            <output id="vocalAmountVal">OFF</output>
+          </div>
+        </div>
+        <canvas id="spectrum" class="spectrum"></canvas>
+
+        <div class="geq-head">
+          <h3>🎚️ 31-BAND GRAPHIC EQ</h3>
+          <button id="geqReset" class="btn btn-sm">Reset Flat</button>
+        </div>
+        <div id="geq" class="geq"></div>
+      </section>
+
+      <!-- ===================== CROSSOVER ===================== -->
+      <section class="panel xover-panel">
+        <div class="panel-head"><h2>🔀 CROSSOVER</h2></div>
+        <div class="xover-controls">
+          <div class="xover-ctl">
+            <label>SUB / LOW</label>
+            <input id="xoSubLow" type="range" min="40" max="120" step="1" value="65" />
+            <output id="xoSubLowVal">65 Hz</output>
+          </div>
+          <div class="xover-ctl">
+            <label>LOW / MID</label>
+            <input id="xoLowMid" type="range" min="150" max="800" step="5" value="300" />
+            <output id="xoLowMidVal">300 Hz</output>
+          </div>
+          <div class="xover-ctl">
+            <label>MID / HIGH</label>
+            <input id="xoMidHigh" type="range" min="1500" max="6000" step="50" value="3000" />
+            <output id="xoMidHighVal">3.0k Hz</output>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== BAND STRIPS ===================== -->
+      <section class="panel bands-panel">
+        <div class="panel-head"><h2>🔊 OUTPUT BANDS</h2></div>
+        <div id="bands" class="bands"></div>
+      </section>
+
+      <!-- ===================== PRESETS ===================== -->
+      <section class="panel preset-panel">
+        <div class="panel-head"><h2>💾 PRESETS</h2></div>
+        <div class="preset-controls">
+          <input id="presetName" type="text" placeholder="Nama preset…" />
+          <button id="presetSave" class="btn btn-sm">Simpan</button>
+          <select id="presetSelect"><option value="">— pilih preset —</option></select>
+          <button id="presetLoad" class="btn btn-sm">Load</button>
+          <button id="presetDelete" class="btn btn-sm btn-danger">Hapus</button>
+          <span class="preset-sep"></span>
+          <button id="presetExport" class="btn btn-sm">⬇ Export</button>
+          <label class="btn btn-sm" for="presetImport">⬆ Import</label>
+          <input id="presetImport" type="file" accept=".json" hidden />
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>DLMS Mixer · real-time DSP · Web Audio API</span>
+      <span id="ctxInfo"></span>
+    </footer>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
