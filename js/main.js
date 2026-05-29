@@ -71,28 +71,51 @@ $('#startBtn').addEventListener('click', async () => {
 // ============================================================
 //  31-BAND GRAPHIC EQ
 // ============================================================
+const GEQ_OCTAVES = new Set([31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]);
+
+// color faders by crossover region (visual grouping)
+function geqRegionColor(freq) {
+  if (freq < 65) return '#ff3b6b';      // sub
+  if (freq < 300) return '#ff9f1c';     // low
+  if (freq < 3000) return '#2ec4b6';    // mid
+  return '#4895ef';                     // high
+}
+
 function buildGeq() {
   const wrap = $('#geq');
   wrap.innerHTML = '';
   ISO_31_BANDS.forEach((freq, i) => {
+    const cap = geqRegionColor(freq);
+
     const band = el('div', 'geq-band');
+    band.dataset.geqIndex = i;
+    band.style.setProperty('--cap', cap);
+
     const val = el('span', 'geq-val', '0');
+
+    const fwrap = el('div', 'fader-wrap');
     const slider = el('input', 'geq-slider');
     slider.type = 'range';
     slider.min = GEQ_MIN_DB;
     slider.max = GEQ_MAX_DB;
     slider.step = 0.5;
     slider.value = 0;
-    slider.setAttribute('orient', 'vertical');
-    slider.addEventListener('input', () => {
-      const db = parseFloat(slider.value);
+    slider.setAttribute('aria-label', `${fmtFreq(freq)} Hz`);
+    slider.title = `${fmtFreq(freq)} Hz — double-click to reset`;
+    fwrap.append(slider);
+
+    const freqLabel = el('span', 'geq-freq' + (GEQ_OCTAVES.has(freq) ? ' oct' : ''), fmtFreq(freq));
+
+    const apply = (db) => {
       engine.setGeqBand(i, db);
       val.textContent = db > 0 ? `+${db}` : `${db}`;
+      band.classList.toggle('active', db !== 0);
       autosave();
-    });
-    const freqLabel = el('span', 'geq-freq', fmtFreq(freq));
-    band.append(val, slider, freqLabel);
-    band.dataset.geqIndex = i;
+    };
+    slider.addEventListener('input', () => apply(parseFloat(slider.value)));
+    slider.addEventListener('dblclick', () => { slider.value = 0; apply(0); });
+
+    band.append(val, fwrap, freqLabel);
     wrap.append(band);
   });
   $('#geqReset').addEventListener('click', () => {
@@ -100,6 +123,7 @@ function buildGeq() {
     wrap.querySelectorAll('.geq-band').forEach((b) => {
       b.querySelector('.geq-slider').value = 0;
       b.querySelector('.geq-val').textContent = '0';
+      b.classList.remove('active');
     });
     autosave();
   });
@@ -440,6 +464,7 @@ function syncUiFromState() {
     const db = s.geq[i] || 0;
     b.querySelector('.geq-slider').value = db;
     b.querySelector('.geq-val').textContent = db > 0 ? `+${db}` : `${db}`;
+    b.classList.toggle('active', db !== 0);
   });
 
   // master + vocal
