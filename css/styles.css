@@ -219,77 +219,70 @@ html, body {
 }
 .geq-band.active .geq-val { color: var(--cap); text-shadow: 0 0 8px var(--cap); }
 
-.fader-wrap {
+/* ----- custom vertical fader (pointer-driven, fully draggable) ----- */
+.vfader {
   position: relative;
   height: 184px;
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
 }
-/* the recessed slot the cap rides in */
-.fader-wrap::before {
+/* recessed slot */
+.vfader::before {
   content: '';
   position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   width: 6px;
   height: 100%;
   border-radius: 5px;
   background: linear-gradient(90deg, #05070a, #1c2532 50%, #05070a);
   box-shadow: inset 0 0 4px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.03);
 }
-/* the centre 0 dB reference notch */
-.fader-wrap::after {
+/* centre 0 dB reference notch */
+.vfader::after {
   content: '';
   position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 18px;
   height: 2px;
   background: rgba(255,255,255,0.18);
   border-radius: 2px;
 }
-
-.geq-slider {
+/* the fader cap (knob) */
+.vfader-cap {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 184px;       /* travel length = fader-wrap height (becomes vertical) */
-  height: 26px;
-  margin: 0;
-  transform: translate(-50%, -50%) rotate(-90deg);
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-  cursor: ns-resize;
-}
-.geq-slider::-webkit-slider-runnable-track { height: 26px; background: transparent; border: none; }
-.geq-slider::-moz-range-track { height: 26px; background: transparent; border: none; }
-/* the fader cap */
-.geq-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 15px;        /* travel-axis thickness */
-  height: 30px;       /* cap width after rotation */
+  transform: translateX(-50%);
+  width: 26px;
+  height: 14px;
   border-radius: 4px;
-  background: linear-gradient(90deg, #f2f6fb 0%, #cfd8e3 44%, #9aa6b6 50%, #cfd8e3 56%, #f2f6fb 100%);
+  background: linear-gradient(180deg, #f2f6fb 0%, #cfd8e3 44%, #9aa6b6 50%, #cfd8e3 56%, #f2f6fb 100%);
   border: 1px solid rgba(0,0,0,0.65);
-  box-shadow:
-    0 0 0 1.5px var(--cap),
-    0 4px 10px rgba(0,0,0,0.7),
-    inset 0 1px 0 rgba(255,255,255,0.8);
-  transition: box-shadow 0.15s, filter 0.15s;
+  box-shadow: 0 0 0 1.5px var(--cap), 0 4px 10px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.85);
+  pointer-events: none;
+  transition: box-shadow 0.15s, filter 0.1s;
 }
-.geq-slider:hover::-webkit-slider-thumb,
-.geq-slider:active::-webkit-slider-thumb {
-  filter: brightness(1.08);
-  box-shadow: 0 0 0 2px var(--cap), 0 0 12px -1px var(--cap), 0 4px 12px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.8);
+/* grip line across the cap */
+.vfader-cap::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: rgba(18,24,33,0.6);
+  border-radius: 2px;
 }
-.geq-slider::-moz-range-thumb {
-  width: 15px;
-  height: 30px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #f2f6fb 0%, #cfd8e3 44%, #9aa6b6 50%, #cfd8e3 56%, #f2f6fb 100%);
-  border: 1px solid rgba(0,0,0,0.65);
-  box-shadow: 0 0 0 1.5px var(--cap), 0 4px 10px rgba(0,0,0,0.7);
-  cursor: ns-resize;
+.vfader:hover .vfader-cap { filter: brightness(1.06); }
+.vfader.dragging .vfader-cap,
+.geq-band.active .vfader-cap {
+  box-shadow: 0 0 0 2px var(--cap), 0 0 13px -1px var(--cap), 0 4px 12px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.85);
 }
 
 .geq-freq {

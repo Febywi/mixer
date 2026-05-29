@@ -9,6 +9,7 @@ import {
 import { MixerEngine } from './audioEngine.js';
 import { SpectrumView, VuMeter } from './visualizer.js';
 import { PresetStore } from './presets.js';
+import { VerticalFader } from './fader.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, cls, html) => {
@@ -72,6 +73,7 @@ $('#startBtn').addEventListener('click', async () => {
 //  31-BAND GRAPHIC EQ
 // ============================================================
 const GEQ_OCTAVES = new Set([31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]);
+const geqFaders = [];
 
 // color faders by crossover region (visual grouping)
 function geqRegionColor(freq) {
@@ -81,9 +83,12 @@ function geqRegionColor(freq) {
   return '#4895ef';                     // high
 }
 
+// Pointer-driven vertical fader is provided by ./fader.js (VerticalFader).
+
 function buildGeq() {
   const wrap = $('#geq');
   wrap.innerHTML = '';
+  geqFaders.length = 0;
   ISO_31_BANDS.forEach((freq, i) => {
     const cap = geqRegionColor(freq);
 
@@ -92,41 +97,43 @@ function buildGeq() {
     band.style.setProperty('--cap', cap);
 
     const val = el('span', 'geq-val', '0');
-
-    const fwrap = el('div', 'fader-wrap');
-    const slider = el('input', 'geq-slider');
-    slider.type = 'range';
-    slider.min = GEQ_MIN_DB;
-    slider.max = GEQ_MAX_DB;
-    slider.step = 0.5;
-    slider.value = 0;
-    slider.setAttribute('aria-label', `${fmtFreq(freq)} Hz`);
-    slider.title = `${fmtFreq(freq)} Hz — double-click to reset`;
-    fwrap.append(slider);
-
+    const track = el('div', 'vfader');
+    track.title = `${fmtFreq(freq)} Hz — drag / scroll · double-click = reset`;
+    const capEl = el('div', 'vfader-cap');
+    track.append(capEl);
     const freqLabel = el('span', 'geq-freq' + (GEQ_OCTAVES.has(freq) ? ' oct' : ''), fmtFreq(freq));
 
-    const apply = (db) => {
-      engine.setGeqBand(i, db);
-      val.textContent = db > 0 ? `+${db}` : `${db}`;
-      band.classList.toggle('active', db !== 0);
-      autosave();
-    };
-    slider.addEventListener('input', () => apply(parseFloat(slider.value)));
-    slider.addEventListener('dblclick', () => { slider.value = 0; apply(0); });
-
-    band.append(val, fwrap, freqLabel);
+    band.append(val, track, freqLabel);
     wrap.append(band);
+
+    const fader = new VerticalFader(track, capEl, {
+      min: GEQ_MIN_DB, max: GEQ_MAX_DB, step: 0.5, value: 0,
+      onInput: (db) => {
+        engine.setGeqBand(i, db);
+        val.textContent = db > 0 ? `+${db}` : `${db}`;
+        band.classList.toggle('active', db !== 0);
+        autosave();
+      },
+    });
+    geqFaders[i] = fader;
   });
+
   $('#geqReset').addEventListener('click', () => {
     engine.resetGeq();
-    wrap.querySelectorAll('.geq-band').forEach((b) => {
-      b.querySelector('.geq-slider').value = 0;
+    wrap.querySelectorAll('.geq-band').forEach((b, i) => {
+      if (geqFaders[i]) geqFaders[i].set(0, false);
       b.querySelector('.geq-val').textContent = '0';
       b.classList.remove('active');
     });
     autosave();
   });
+
+  // re-place caps correctly if the layout size changes
+  window.addEventListener('resize', () => {
+    geqFaders.forEach((f) => f.set(f.value, false));
+  });
+  // ensure caps land correctly once layout/fonts have settled
+  requestAnimationFrame(() => geqFaders.forEach((f) => f.set(f.value, false)));
 }
 
 // ============================================================
@@ -462,7 +469,7 @@ function syncUiFromState() {
   // GEQ
   document.querySelectorAll('#geq .geq-band').forEach((b, i) => {
     const db = s.geq[i] || 0;
-    b.querySelector('.geq-slider').value = db;
+    if (geqFaders[i]) geqFaders[i].set(db, false);
     b.querySelector('.geq-val').textContent = db > 0 ? `+${db}` : `${db}`;
     b.classList.toggle('active', db !== 0);
   });
