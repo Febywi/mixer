@@ -83,6 +83,20 @@ export const BAND_DEFAULTS = {
   compRelease: 0.25,
   compKnee: 18,
   limiterThreshold: -3,
+  // Echo / delay FX (feedback echo, separate from alignment delay)
+  echoOn: false,
+  echoTimeMs: 350,
+  echoFeedback: 0.35,
+  echoWet: 0.3,
+};
+
+// Input channel-strip defaults (applied before EQ/crossover)
+export const INPUT_DEFAULTS = {
+  gainDb: 0,
+  lowCutOn: false,
+  lowCutFreq: 80,
+  gateOn: false,
+  gateThreshold: -45,  // dBFS; below this the gate closes
 };
 
 // Master section defaults — soft-knee limiter to avoid harsh clamping

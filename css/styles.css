@@ -121,7 +121,7 @@ html, body {
   grid-template-columns: 300px 1fr;
   grid-template-areas:
     "sources analyzer"
-    "sources xover"
+    "input   xover"
     "bands   bands"
     "preset  preset";
   gap: 16px;
@@ -129,10 +129,17 @@ html, body {
   align-items: start;
 }
 .sources { grid-area: sources; }
+.input-panel { grid-area: input; }
 .analyzer-panel { grid-area: analyzer; }
 .xover-panel { grid-area: xover; }
 .bands-panel { grid-area: bands; }
 .preset-panel { grid-area: preset; }
+
+/* ---------- input channel strip ---------- */
+.input-panel { --band-color: var(--accent); }
+.input-strip { display: flex; flex-direction: column; gap: 12px; }
+.input-row { display: flex; align-items: flex-end; gap: 10px; }
+.input-row .tg { align-self: stretch; display: flex; align-items: center; justify-content: center; }
 
 .panel {
   background: linear-gradient(180deg, var(--panel), var(--bg-2));
@@ -383,7 +390,7 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 1000px) {
   .layout {
     grid-template-columns: 1fr;
-    grid-template-areas: "sources" "analyzer" "xover" "bands" "preset";
+    grid-template-areas: "sources" "input" "analyzer" "xover" "bands" "preset";
   }
   .bands { grid-template-columns: repeat(2, 1fr); }
   .master-knob { width: 80px; }

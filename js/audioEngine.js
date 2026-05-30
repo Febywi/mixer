@@ -2,16 +2,17 @@
 //  audioEngine.js — Real-time DSP graph (Web Audio API)
 //
 //  Signal flow:
-//    tracks -> inputBus -> vocalRemover -> 31-band GEQ
-//      -> crossover (SUB/LOW/MID/HIGH)
-//      -> per band: phase -> delay -> compressor -> reverb mix
-//                   -> level -> mute/solo -> meter -> masterSum
+//    tracks -> inputBus -> [input gain -> low-cut/HPF -> noise gate]
+//      -> vocalRemover -> 31-band GEQ -> crossover (SUB/LOW/MID/HIGH)
+//      -> per band: phase -> alignment delay -> compressor
+//                   -> (dry + reverb + feedback echo) -> level
+//                   -> mute/solo -> meter -> masterSum
 //      -> masterSum -> master limiter -> master gain -> analyser -> out
 // ============================================================
 
 import {
   ISO_31_BANDS, GEQ_Q, BANDS, XOVER_RANGES, BAND_DEFAULTS,
-  MASTER_DEFAULTS, REVERB_PRESETS, dbToGain, clamp,
+  MASTER_DEFAULTS, INPUT_DEFAULTS, REVERB_PRESETS, dbToGain, gainToDb, clamp,
 } from './constants.js';
 
 const LR_Q = Math.SQRT1_2; // 0.7071 — Butterworth Q for Linkwitz-Riley sections
@@ -26,6 +27,7 @@ export class MixerEngine {
     // state mirrors (for presets)
     this.state = {
       master: { ...MASTER_DEFAULTS },
+      input: { ...INPUT_DEFAULTS },
       vocal: { amount: 0 },
       geq: new Array(ISO_31_BANDS.length).fill(0),
       xover: {
@@ -50,8 +52,15 @@ export class MixerEngine {
         compThreshold: BAND_DEFAULTS.compThreshold,
         compRatio: BAND_DEFAULTS.compRatio,
         limiterThreshold: BAND_DEFAULTS.limiterThreshold,
+        echoOn: BAND_DEFAULTS.echoOn,
+        echoTimeMs: BAND_DEFAULTS.echoTimeMs,
+        echoFeedback: BAND_DEFAULTS.echoFeedback,
+        echoWet: BAND_DEFAULTS.echoWet,
       };
     });
+
+    // gate envelope state (per input strip)
+    this._gateOpen = 1;
   }
 
   // ---- lifecycle ----------------------------------------------------------
@@ -75,9 +84,13 @@ export class MixerEngine {
     // Input summing bus
     this.inputBus = ctx.createGain();
 
+    // ---- Input channel strip: gain -> low-cut (HPF) -> gate ----
+    this._buildInputStrip();
+    this.inputBus.connect(this.input.gain);
+
     // ---- Vocal remover sub-graph (mid-side) ----
     this._buildVocalRemover();
-    this.inputBus.connect(this.vr.input);
+    this.input.gateGain.connect(this.vr.input);
 
     // ---- 31-band Graphic EQ ----
     this.geqFilters = ISO_31_BANDS.map((freq) => {
@@ -127,6 +140,33 @@ export class MixerEngine {
     BANDS.forEach((b) => this._buildBand(b));
     this._applyCrossoverFreqs();
     this.updateMuteSolo();
+  }
+
+  _buildInputStrip() {
+    const ctx = this.ctx;
+    const st = this.state.input;
+
+    const gain = ctx.createGain();
+    gain.gain.value = dbToGain(st.gainDb);
+
+    // low cut / HPF (12 dB/oct). When off, push cutoff sub-audible (~10 Hz).
+    const lowCut = ctx.createBiquadFilter();
+    lowCut.type = 'highpass';
+    lowCut.Q.value = LR_Q;
+    lowCut.frequency.value = st.lowCutOn ? st.lowCutFreq : 10;
+
+    // noise gate: gain controlled by an envelope follower (rAF-driven, smoothed)
+    const gateGain = ctx.createGain();
+    gateGain.gain.value = 1;
+
+    const gateMeter = ctx.createAnalyser();
+    gateMeter.fftSize = 1024;
+
+    gain.connect(lowCut);
+    lowCut.connect(gateGain);
+    lowCut.connect(gateMeter); // observation tap
+
+    this.input = { gain, lowCut, gateGain, gateMeter };
   }
 
   _buildVocalRemover() {
@@ -256,6 +296,25 @@ export class MixerEngine {
     dryGain.connect(mix);
     wetGain.connect(mix);
 
+    // echo / delay FX — real feedback echo (separate from alignment delay)
+    const echoDelay = ctx.createDelay(2.0);
+    echoDelay.delayTime.value = st.echoTimeMs / 1000;
+    const echoFb = ctx.createGain();
+    echoFb.gain.value = st.echoOn ? st.echoFeedback : 0;
+    const echoWet = ctx.createGain();
+    echoWet.gain.value = st.echoOn ? st.echoWet : 0;
+    // damp the repeats a touch so they don't sound harsh
+    const echoDamp = ctx.createBiquadFilter();
+    echoDamp.type = 'lowpass';
+    echoDamp.frequency.value = 6500;
+    echoDamp.Q.value = LR_Q;
+    postComp.connect(echoDelay);
+    echoDelay.connect(echoDamp);
+    echoDamp.connect(echoFb);
+    echoFb.connect(echoDelay);     // feedback loop
+    echoDelay.connect(echoWet);
+    echoWet.connect(mix);
+
     // level (gain dB)
     const level = ctx.createGain();
     level.gain.value = dbToGain(st.gainDb);
@@ -275,6 +334,7 @@ export class MixerEngine {
     this.bandNodes[b.id] = {
       filters, xIn, xOut, phase, delay, comp, postComp,
       dryGain, convolver, wetGain, mix, level, active, meter,
+      echoDelay, echoFb, echoWet, echoDamp,
       compBypassed: false,
     };
   }
@@ -470,6 +530,82 @@ export class MixerEngine {
     this.vr.dry.gain.setTargetAtTime(1 - amount, t, 0.02);
   }
 
+  // ---- input channel strip ----
+  setInputGain(db) {
+    this.state.input.gainDb = db;
+    this.input.gain.gain.setTargetAtTime(dbToGain(db), this.ctx.currentTime, 0.01);
+  }
+
+  setLowCut(on) {
+    this.state.input.lowCutOn = on;
+    const f = on ? this.state.input.lowCutFreq : 10;
+    this.input.lowCut.frequency.setTargetAtTime(f, this.ctx.currentTime, 0.02);
+  }
+
+  setLowCutFreq(hz) {
+    this.state.input.lowCutFreq = hz;
+    if (this.state.input.lowCutOn) {
+      this.input.lowCut.frequency.setTargetAtTime(hz, this.ctx.currentTime, 0.02);
+    }
+  }
+
+  setGate(on) {
+    this.state.input.gateOn = on;
+    if (!on) {
+      this._gateOpen = 1;
+      this.input.gateGain.gain.setTargetAtTime(1, this.ctx.currentTime, 0.02);
+    }
+  }
+
+  setGateThreshold(db) {
+    this.state.input.gateThreshold = db;
+  }
+
+  // Called each animation frame to drive the noise gate envelope.
+  tickGate() {
+    if (!this.input || !this.state.input.gateOn) return;
+    const rms = this._rms(this.input.gateMeter);
+    const db = gainToDb(rms);
+    const th = this.state.input.gateThreshold;
+    // hysteresis: open a bit above threshold, close a bit below
+    const open = this._gateOpen > 0.5 ? db > th - 3 : db > th + 1;
+    const target = open ? 1 : 0;
+    this._gateOpen = target;
+    // fast attack (open), slower release (close) to avoid choppiness
+    const tc = target ? 0.005 : 0.08;
+    this.input.gateGain.gain.setTargetAtTime(target, this.ctx.currentTime, tc);
+  }
+
+  // ---- per-band echo / delay FX ----
+  setBandEcho(bandId, on) {
+    const st = this.state.bands[bandId];
+    st.echoOn = on;
+    const n = this.bandNodes[bandId];
+    const t = this.ctx.currentTime;
+    n.echoWet.gain.setTargetAtTime(on ? st.echoWet : 0, t, 0.02);
+    n.echoFb.gain.setTargetAtTime(on ? st.echoFeedback : 0, t, 0.02);
+  }
+
+  setBandEchoTime(bandId, ms) {
+    this.state.bands[bandId].echoTimeMs = ms;
+    this.bandNodes[bandId].echoDelay.delayTime.setTargetAtTime(ms / 1000, this.ctx.currentTime, 0.02);
+  }
+
+  setBandEchoFeedback(bandId, fb) {
+    fb = clamp(fb, 0, 0.9);
+    this.state.bands[bandId].echoFeedback = fb;
+    if (this.state.bands[bandId].echoOn) {
+      this.bandNodes[bandId].echoFb.gain.setTargetAtTime(fb, this.ctx.currentTime, 0.02);
+    }
+  }
+
+  setBandEchoWet(bandId, wet) {
+    this.state.bands[bandId].echoWet = wet;
+    if (this.state.bands[bandId].echoOn) {
+      this.bandNodes[bandId].echoWet.gain.setTargetAtTime(wet, this.ctx.currentTime, 0.02);
+    }
+  }
+
   setGeqBand(index, db) {
     this.state.geq[index] = db;
     this.geqFilters[index].gain.setTargetAtTime(db, this.ctx.currentTime, 0.01);
@@ -639,6 +775,7 @@ export class MixerEngine {
   exportState() {
     return JSON.parse(JSON.stringify({
       master: this.state.master,
+      input: this.state.input,
       vocal: this.state.vocal,
       geq: this.state.geq,
       xover: this.state.xover,
@@ -648,6 +785,16 @@ export class MixerEngine {
 
   importState(s) {
     if (!s) return;
+    if (s.input) {
+      const i = s.input;
+      this.state.input.lowCutFreq = i.lowCutFreq ?? this.state.input.lowCutFreq;
+      this.state.input.gateThreshold = i.gateThreshold ?? this.state.input.gateThreshold;
+      this.setInputGain(i.gainDb ?? 0);
+      this.setLowCutFreq(this.state.input.lowCutFreq);
+      this.setLowCut(!!i.lowCutOn);
+      this.setGate(!!i.gateOn);
+      this.setGateThreshold(this.state.input.gateThreshold);
+    }
     if (s.vocal) this.setVocalAmount(s.vocal.amount);
     if (Array.isArray(s.geq)) s.geq.forEach((db, i) => this.setGeqBand(i, db));
     if (s.xover) {
@@ -665,7 +812,12 @@ export class MixerEngine {
         this.setBandReverbOn(id, b.reverbOn);
         this.setBandCompThreshold(id, b.compThreshold);
         this.setBandCompRatio(id, b.compRatio);
-        this.setBandComp(id, b.compOn !== false);
+        this.setBandComp(id, !!b.compOn);
+        // echo
+        if (b.echoTimeMs != null) this.setBandEchoTime(id, b.echoTimeMs);
+        if (b.echoFeedback != null) this.state.bands[id].echoFeedback = b.echoFeedback;
+        if (b.echoWet != null) this.state.bands[id].echoWet = b.echoWet;
+        this.setBandEcho(id, !!b.echoOn);
         this.state.bands[id].mute = !!b.mute;
         this.state.bands[id].solo = !!b.solo;
       });

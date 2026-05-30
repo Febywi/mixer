@@ -48,6 +48,7 @@ $('#startBtn').addEventListener('click', async () => {
   buildGeq();
   buildBands();
   wireMaster();
+  wireInput();
   wireVocal();
   wireCrossover();
   wireTransport();
@@ -181,6 +182,7 @@ function buildBands() {
           </div>
           <div class="band-toggles">
             <div class="tg ${st.reverbOn ? 'on' : ''}" data-reverb style="flex:1">REVERB</div>
+            <div class="tg ${st.echoOn ? 'on' : ''}" data-echo style="flex:1">ECHO</div>
             <div class="tg ${st.compOn ? 'on' : ''}" data-comp style="flex:1">COMP</div>
           </div>
           <div class="ctl">
@@ -195,6 +197,18 @@ function buildBands() {
           <div class="ctl">
             <div class="ctl-head"><label>COMP RATIO</label><output data-ratioval>${st.compRatio}:1</output></div>
             <input type="range" data-compratio min="1" max="20" step="0.1" value="${st.compRatio}" />
+          </div>
+          <div class="ctl">
+            <div class="ctl-head"><label>ECHO TIME</label><output data-echotimeval>${st.echoTimeMs} ms</output></div>
+            <input type="range" data-echotime min="50" max="1200" step="5" value="${st.echoTimeMs}" />
+          </div>
+          <div class="ctl">
+            <div class="ctl-head"><label>ECHO FEEDBACK</label><output data-echofbval>${Math.round(st.echoFeedback * 100)}%</output></div>
+            <input type="range" data-echofb min="0" max="90" step="1" value="${Math.round(st.echoFeedback * 100)}" />
+          </div>
+          <div class="ctl">
+            <div class="ctl-head"><label>ECHO MIX</label><output data-echowetval>${Math.round(st.echoWet * 100)}%</output></div>
+            <input type="range" data-echowet min="0" max="100" step="1" value="${Math.round(st.echoWet * 100)}" />
           </div>
         </div>
       </div>`;
@@ -213,6 +227,8 @@ function buildBands() {
     phaseEl.onclick = () => { const on = !phaseEl.classList.contains('on'); phaseEl.classList.toggle('on', on); engine.setBandPhase(b.id, on); autosave(); };
     const revEl = card.querySelector('[data-reverb]');
     revEl.onclick = () => { const on = !revEl.classList.contains('on'); revEl.classList.toggle('on', on); engine.setBandReverbOn(b.id, on); autosave(); };
+    const echoEl = card.querySelector('[data-echo]');
+    echoEl.onclick = () => { const on = !echoEl.classList.contains('on'); echoEl.classList.toggle('on', on); engine.setBandEcho(b.id, on); autosave(); };
     const compEl = card.querySelector('[data-comp]');
     compEl.onclick = () => { const on = !compEl.classList.contains('on'); compEl.classList.toggle('on', on); engine.setBandComp(b.id, on); autosave(); };
 
@@ -239,6 +255,18 @@ function buildBands() {
     const compRatio = card.querySelector('[data-compratio]');
     const ratioVal = card.querySelector('[data-ratioval]');
     compRatio.oninput = () => { const v = parseFloat(compRatio.value); engine.setBandCompRatio(b.id, v); ratioVal.textContent = `${v}:1`; autosave(); };
+
+    const echoTime = card.querySelector('[data-echotime]');
+    const echoTimeVal = card.querySelector('[data-echotimeval]');
+    echoTime.oninput = () => { const v = parseInt(echoTime.value); engine.setBandEchoTime(b.id, v); echoTimeVal.textContent = `${v} ms`; autosave(); };
+
+    const echoFb = card.querySelector('[data-echofb]');
+    const echoFbVal = card.querySelector('[data-echofbval]');
+    echoFb.oninput = () => { const v = parseInt(echoFb.value); engine.setBandEchoFeedback(b.id, v / 100); echoFbVal.textContent = `${v}%`; autosave(); };
+
+    const echoWet = card.querySelector('[data-echowet]');
+    const echoWetVal = card.querySelector('[data-echowetval]');
+    echoWet.oninput = () => { const v = parseInt(echoWet.value); engine.setBandEchoWet(b.id, v / 100); echoWetVal.textContent = `${v}%`; autosave(); };
   });
 }
 
@@ -263,6 +291,21 @@ function wireMaster() {
   g.oninput = () => { const v = parseFloat(g.value); engine.setMasterGain(v); gv.textContent = `${v.toFixed(1)} dB`; autosave(); };
   const l = $('#masterLimiter'), lv = $('#masterLimiterVal');
   l.oninput = () => { const v = parseFloat(l.value); engine.setMasterLimiter(v); lv.textContent = `${v.toFixed(1)} dB`; autosave(); };
+}
+
+function wireInput() {
+  const g = $('#inGain'), gv = $('#inGainVal');
+  g.oninput = () => { const v = parseFloat(g.value); engine.setInputGain(v); gv.textContent = `${v.toFixed(1)} dB`; autosave(); };
+
+  const lcT = $('#lowCutToggle');
+  lcT.onclick = () => { const on = !lcT.classList.contains('on'); lcT.classList.toggle('on', on); engine.setLowCut(on); autosave(); };
+  const lcF = $('#lowCutFreq'), lcV = $('#lowCutVal');
+  lcF.oninput = () => { const v = parseInt(lcF.value); engine.setLowCutFreq(v); lcV.textContent = `${v} Hz`; autosave(); };
+
+  const gT = $('#gateToggle');
+  gT.onclick = () => { const on = !gT.classList.contains('on'); gT.classList.toggle('on', on); engine.setGate(on); autosave(); };
+  const gThr = $('#gateThresh'), gThrV = $('#gateVal');
+  gThr.oninput = () => { const v = parseInt(gThr.value); engine.setGateThreshold(v); gThrV.textContent = `${v} dB`; autosave(); };
 }
 
 function wireVocal() {
@@ -488,6 +531,16 @@ function syncUiFromState() {
   const vp = Math.round(s.vocal.amount * 100);
   $('#vocalAmount').value = vp; $('#vocalAmountVal').textContent = vp === 0 ? 'OFF' : `${vp}%`;
 
+  // input strip
+  if (s.input) {
+    const i = s.input;
+    $('#inGain').value = i.gainDb; $('#inGainVal').textContent = `${(+i.gainDb).toFixed(1)} dB`;
+    $('#lowCutToggle').classList.toggle('on', !!i.lowCutOn);
+    $('#lowCutFreq').value = i.lowCutFreq; $('#lowCutVal').textContent = `${i.lowCutFreq} Hz`;
+    $('#gateToggle').classList.toggle('on', !!i.gateOn);
+    $('#gateThresh').value = i.gateThreshold; $('#gateVal').textContent = `${i.gateThreshold} dB`;
+  }
+
   // crossover
   $('#xoSubLow').value = s.xover.subLow; $('#xoSubLowVal').textContent = `${fmtFreq(s.xover.subLow)} Hz`;
   $('#xoLowMid').value = s.xover.lowMid; $('#xoLowMidVal').textContent = `${fmtFreq(s.xover.lowMid)} Hz`;
@@ -502,6 +555,7 @@ function syncUiFromState() {
     card.querySelector('[data-solo]').classList.toggle('on', st.solo);
     card.querySelector('[data-phase]').classList.toggle('on', st.phaseInvert);
     card.querySelector('[data-reverb]').classList.toggle('on', st.reverbOn);
+    card.querySelector('[data-echo]').classList.toggle('on', st.echoOn);
     card.querySelector('[data-comp]').classList.toggle('on', st.compOn);
     card.querySelector('[data-gain]').value = st.gainDb;
     card.querySelector('[data-gainval]').textContent = `${st.gainDb.toFixed(1)} dB`;
@@ -516,6 +570,15 @@ function syncUiFromState() {
     if (ratioEl) {
       ratioEl.value = st.compRatio;
       card.querySelector('[data-ratioval]').textContent = `${st.compRatio}:1`;
+    }
+    const echoTimeEl = card.querySelector('[data-echotime]');
+    if (echoTimeEl) {
+      echoTimeEl.value = st.echoTimeMs;
+      card.querySelector('[data-echotimeval]').textContent = `${st.echoTimeMs} ms`;
+      card.querySelector('[data-echofb]').value = Math.round(st.echoFeedback * 100);
+      card.querySelector('[data-echofbval]').textContent = `${Math.round(st.echoFeedback * 100)}%`;
+      card.querySelector('[data-echowet]').value = Math.round(st.echoWet * 100);
+      card.querySelector('[data-echowetval]').textContent = `${Math.round(st.echoWet * 100)}%`;
     }
   });
 }
@@ -533,6 +596,9 @@ function autosave() {
 //  RENDER LOOP
 // ============================================================
 function loop() {
+  // noise gate envelope follower
+  engine.tickGate();
+
   // spectrum + GEQ overlay
   spectrum.draw();
 
