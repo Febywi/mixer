@@ -13,9 +13,9 @@ export const ISO_31_BANDS = [
 // Q factor for a 1/3-octave peaking filter (constant-Q graphic EQ)
 export const GEQ_Q = 4.318;
 
-// Graphic EQ gain range (dB)
-export const GEQ_MIN_DB = -12;
-export const GEQ_MAX_DB = 12;
+// Graphic EQ gain range (dB) — wide range for full control
+export const GEQ_MIN_DB = -15;
+export const GEQ_MAX_DB = 15;
 
 // ------------------------------------------------------------
 //  Crossover band definitions (4-way)
@@ -64,32 +64,32 @@ export const BANDS = [
   },
 ];
 
-// Crossover frequency adjustable ranges (Hz) for the UI sliders
+// Crossover frequency adjustable ranges (Hz) for the UI sliders — wide for freedom
 export const XOVER_RANGES = {
-  subLow: { min: 40, max: 120, default: 65 },   // Sub / Low split
-  lowMid: { min: 150, max: 800, default: 300 }, // Low / Mid split
-  midHigh: { min: 1500, max: 6000, default: 3000 }, // Mid / High split
+  subLow: { min: 30, max: 200, default: 65 },     // Sub / Low split
+  lowMid: { min: 100, max: 1200, default: 300 },  // Low / Mid split
+  midHigh: { min: 800, max: 9000, default: 3000 },// Mid / High split
 };
 
 // Per-band default processing values
 export const BAND_DEFAULTS = {
   gainDb: 0,
   delayMs: 0,
-  reverbWet: 0.25,
-  // Compressor / limiter
+  reverbWet: 0.2,
+  // Compressor / limiter — gentle, soft-knee (off by default for clean sound)
   compThreshold: -18,
-  compRatio: 3,
-  compAttack: 0.005,
-  compRelease: 0.15,
-  compKnee: 6,
+  compRatio: 2.5,
+  compAttack: 0.012,
+  compRelease: 0.25,
+  compKnee: 18,
   limiterThreshold: -3,
 };
 
-// Master section defaults
+// Master section defaults — soft-knee limiter to avoid harsh clamping
 export const MASTER_DEFAULTS = {
   gainDb: 0,
   limiterThreshold: -1,
-  limiterRelease: 0.1,
+  limiterRelease: 0.18,
 };
 
 // Reverb impulse response defaults (synthesized, no external file)

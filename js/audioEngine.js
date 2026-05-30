@@ -46,7 +46,7 @@ export class MixerEngine {
         reverbOn: b.reverbDefault,
         reverbWet: BAND_DEFAULTS.reverbWet,
         reverbPreset: 'hall',
-        compOn: true,
+        compOn: false,
         compThreshold: BAND_DEFAULTS.compThreshold,
         compRatio: BAND_DEFAULTS.compRatio,
         limiterThreshold: BAND_DEFAULTS.limiterThreshold,
@@ -101,9 +101,9 @@ export class MixerEngine {
 
     this.masterLimiter = ctx.createDynamicsCompressor();
     this.masterLimiter.threshold.value = MASTER_DEFAULTS.limiterThreshold;
-    this.masterLimiter.knee.value = 0;
-    this.masterLimiter.ratio.value = 20;
-    this.masterLimiter.attack.value = 0.003;
+    this.masterLimiter.knee.value = 6;     // soft knee = smooth, non-harsh limiting
+    this.masterLimiter.ratio.value = 12;
+    this.masterLimiter.attack.value = 0.005;
     this.masterLimiter.release.value = MASTER_DEFAULTS.limiterRelease;
 
     this.masterGain = ctx.createGain();
@@ -222,11 +222,17 @@ export class MixerEngine {
 
     // compressor / limiter
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = st.compThreshold;
     comp.knee.value = BAND_DEFAULTS.compKnee;
-    comp.ratio.value = st.compRatio;
     comp.attack.value = BAND_DEFAULTS.compAttack;
     comp.release.value = BAND_DEFAULTS.compRelease;
+    if (st.compOn) {
+      comp.threshold.value = st.compThreshold;
+      comp.ratio.value = st.compRatio;
+    } else {
+      // transparent (no compression) until enabled
+      comp.threshold.value = 0;
+      comp.ratio.value = 1;
+    }
     delay.connect(comp);
     // comp on/off is handled in setBandComp() by switching ratio/threshold to transparent.
 
@@ -274,17 +280,37 @@ export class MixerEngine {
   }
 
   // ---- reverb impulse synthesis (no external files) -----------------------
+  // Smooth, natural tail: filtered noise + progressive high-frequency damping
+  // + fade-in + normalization. Avoids the harsh/grainy "white-noise" reverb.
   _makeImpulse({ seconds, decay }) {
     const ctx = this.ctx;
     const rate = ctx.sampleRate;
     const len = Math.max(1, Math.floor(rate * seconds));
     const buf = ctx.createBuffer(2, len, rate);
+    const fadeIn = Math.max(1, Math.floor(rate * 0.006)); // ~6ms fade-in (no click)
+
     for (let ch = 0; ch < 2; ch++) {
       const data = buf.getChannelData(ch);
+      let lp = 0;     // one-pole lowpass state (smooths/dampens the noise)
+      let peak = 0;
       for (let i = 0; i < len; i++) {
         const t = i / len;
-        // exponentially decaying noise
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+        // exponential energy decay
+        const env = Math.pow(1 - t, decay);
+        // damping: brighter early, darker in the tail (natural air absorption)
+        const damp = 0.55 - 0.42 * t;        // cutoff coeff: ~bright -> dark
+        const white = Math.random() * 2 - 1;
+        lp += damp * (white - lp);           // low-passed noise
+        let s = lp * env;
+        if (i < fadeIn) s *= i / fadeIn;     // smooth onset
+        data[i] = s;
+        const a = Math.abs(s);
+        if (a > peak) peak = a;
+      }
+      // normalize so reverb level is consistent across presets
+      if (peak > 0) {
+        const norm = 0.9 / peak;
+        for (let i = 0; i < len; i++) data[i] *= norm;
       }
     }
     return buf;

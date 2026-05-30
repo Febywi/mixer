@@ -173,11 +173,11 @@ function buildBands() {
           </div>
           <div class="ctl">
             <div class="ctl-head"><label>GAIN</label><output data-gainval>${st.gainDb.toFixed(1)} dB</output></div>
-            <input type="range" data-gain min="-40" max="12" step="0.5" value="${st.gainDb}" />
+            <input type="range" data-gain min="-60" max="12" step="0.1" value="${st.gainDb}" />
           </div>
           <div class="ctl">
             <div class="ctl-head"><label>DELAY</label><output data-delval>${st.delayMs} ms</output></div>
-            <input type="range" data-delay min="0" max="100" step="0.5" value="${st.delayMs}" />
+            <input type="range" data-delay min="0" max="200" step="0.1" value="${st.delayMs}" />
           </div>
           <div class="band-toggles">
             <div class="tg ${st.reverbOn ? 'on' : ''}" data-reverb style="flex:1">REVERB</div>
@@ -185,12 +185,16 @@ function buildBands() {
           </div>
           <div class="ctl">
             <div class="ctl-head"><label>REVERB MIX</label><output data-revval>${Math.round(st.reverbWet * 100)}%</output></div>
-            <input type="range" data-reverbwet min="0" max="80" step="1" value="${Math.round(st.reverbWet * 100)}" />
+            <input type="range" data-reverbwet min="0" max="100" step="1" value="${Math.round(st.reverbWet * 100)}" />
           </div>
           <select data-revpreset>${revPresetOpts}</select>
           <div class="ctl">
             <div class="ctl-head"><label>COMP THRESH</label><output data-compval>${st.compThreshold} dB</output></div>
-            <input type="range" data-compthresh min="-48" max="0" step="1" value="${st.compThreshold}" />
+            <input type="range" data-compthresh min="-60" max="0" step="0.5" value="${st.compThreshold}" />
+          </div>
+          <div class="ctl">
+            <div class="ctl-head"><label>COMP RATIO</label><output data-ratioval>${st.compRatio}:1</output></div>
+            <input type="range" data-compratio min="1" max="20" step="0.1" value="${st.compRatio}" />
           </div>
         </div>
       </div>`;
@@ -219,7 +223,7 @@ function buildBands() {
 
     const delay = card.querySelector('[data-delay]');
     const delVal = card.querySelector('[data-delval]');
-    delay.oninput = () => { const v = parseFloat(delay.value); engine.setBandDelay(b.id, v); delVal.textContent = `${v} ms`; autosave(); };
+    delay.oninput = () => { const v = parseFloat(delay.value); engine.setBandDelay(b.id, v); delVal.textContent = `${v.toFixed(1)} ms`; autosave(); };
 
     const wet = card.querySelector('[data-reverbwet]');
     const revVal = card.querySelector('[data-revval]');
@@ -230,7 +234,11 @@ function buildBands() {
 
     const compThr = card.querySelector('[data-compthresh]');
     const compVal = card.querySelector('[data-compval]');
-    compThr.oninput = () => { const v = parseInt(compThr.value); engine.setBandCompThreshold(b.id, v); compVal.textContent = `${v} dB`; autosave(); };
+    compThr.oninput = () => { const v = parseFloat(compThr.value); engine.setBandCompThreshold(b.id, v); compVal.textContent = `${v} dB`; autosave(); };
+
+    const compRatio = card.querySelector('[data-compratio]');
+    const ratioVal = card.querySelector('[data-ratioval]');
+    compRatio.oninput = () => { const v = parseFloat(compRatio.value); engine.setBandCompRatio(b.id, v); ratioVal.textContent = `${v}:1`; autosave(); };
   });
 }
 
@@ -498,12 +506,17 @@ function syncUiFromState() {
     card.querySelector('[data-gain]').value = st.gainDb;
     card.querySelector('[data-gainval]').textContent = `${st.gainDb.toFixed(1)} dB`;
     card.querySelector('[data-delay]').value = st.delayMs;
-    card.querySelector('[data-delval]').textContent = `${st.delayMs} ms`;
+    card.querySelector('[data-delval]').textContent = `${(+st.delayMs).toFixed(1)} ms`;
     card.querySelector('[data-reverbwet]').value = Math.round(st.reverbWet * 100);
     card.querySelector('[data-revval]').textContent = `${Math.round(st.reverbWet * 100)}%`;
     card.querySelector('[data-revpreset]').value = st.reverbPreset;
     card.querySelector('[data-compthresh]').value = st.compThreshold;
     card.querySelector('[data-compval]').textContent = `${st.compThreshold} dB`;
+    const ratioEl = card.querySelector('[data-compratio]');
+    if (ratioEl) {
+      ratioEl.value = st.compRatio;
+      card.querySelector('[data-ratioval]').textContent = `${st.compRatio}:1`;
+    }
   });
 }
 
