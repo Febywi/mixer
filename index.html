@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NEXUS DSP — Web Audio Workstation / DLMS</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- ============ TOP TOOLBAR ============ -->
+  <header class="toolbar">
+    <div class="brand">
+      <div class="brand-logo">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+      <div class="brand-text">
+        <h1>NEXUS<span>DSP</span></h1>
+        <p>Web Audio Workstation · DLMS</p>
+      </div>
+    </div>
+
+    <div class="toolbar-center">
+      <label class="btn btn-accent upload-btn" for="fileInput">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3v12m0-12l-4 4m4-4l4 4M5 21h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Upload Lagu
+      </label>
+      <input type="file" id="fileInput" accept="audio/*" multiple hidden />
+
+      <div class="seg" id="modeToggle" role="group" aria-label="Mode">
+        <button class="seg-btn active" data-mode="easy">Easy</button>
+        <button class="seg-btn" data-mode="pro">Pro</button>
+      </div>
+
+      <div class="seg" id="qualityToggle" role="group" aria-label="Quality">
+        <button class="seg-btn active" data-quality="hq">High Quality</button>
+        <button class="seg-btn" data-quality="ll">Low Latency</button>
+      </div>
+
+      <div class="seg" id="compareToggle" role="group" aria-label="Compare">
+        <button class="seg-btn active" data-cmp="proc" title="Suara hasil tuning">Processed</button>
+        <button class="seg-btn" data-cmp="orig" title="Suara asli (bypass)">Original</button>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <div class="master-mini">
+        <span class="ml-dot" id="engineDot"></span>
+        <span id="engineState">Idle</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ MAIN GRID ============ -->
+  <main class="app-grid">
+    <!-- ---------- LEFT: PLAYLIST ---------- -->
+    <aside class="panel playlist-panel">
+      <div class="panel-head">
+        <h2>Playlist</h2>
+        <span class="count" id="songCount">0</span>
+      </div>
+
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="text" id="searchInput" placeholder="Cari lagu..." />
+      </div>
+
+      <ul class="songlist" id="songList">
+        <li class="empty-hint" id="emptyHint">
+          <svg viewBox="0 0 24 24" width="34" height="34"><path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="18" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <p>Belum ada lagu.<br/>Upload buat mulai.</p>
+        </li>
+      </ul>
+
+      <div class="transport">
+        <button class="t-btn" id="btnShuffle" title="Shuffle">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="t-btn" id="btnPrev" title="Previous">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M19 20L9 12l10-8v16zM5 19V5" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="t-btn t-play" id="btnPlay" title="Play / Pause">
+          <svg id="iconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M7 4l14 8-14 8V4z" fill="currentColor"/></svg>
+          <svg id="iconPause" class="hidden" viewBox="0 0 24 24" width="24" height="24"><path d="M7 4h4v16H7zM13 4h4v16h-4z" fill="currentColor"/></svg>
+        </button>
+        <button class="t-btn" id="btnNext" title="Next">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M5 4l10 8-10 8V4zM19 5v14" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="t-btn" id="btnRepeat" title="Repeat">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="repeat-one" id="repeatOne">1</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ---------- CENTER ---------- -->
+    <section class="panel center-panel">
+      <!-- Now playing + waveform -->
+      <div class="now-playing">
+        <div class="np-info">
+          <div class="np-title" id="npTitle">Tidak ada lagu</div>
+          <div class="np-sub" id="npSub">Upload & pilih lagu untuk mulai</div>
+        </div>
+        <div class="np-time">
+          <span id="curTime">0:00</span> / <span id="durTime">0:00</span>
+        </div>
+      </div>
+
+      <div class="waveform-wrap">
+        <canvas id="waveform"></canvas>
+        <div class="wave-progress" id="waveProgress"></div>
+        <div class="wave-cursor" id="waveCursor"></div>
+      </div>
+
+      <!-- Tabs -->
+      <nav class="tabs" id="tabs">
+        <button class="tab active" data-tab="eq">EQ</button>
+        <button class="tab" data-tab="analyzer">Analyzer</button>
+        <button class="tab" data-tab="master">Master</button>
+        <button class="tab" data-tab="preset">Preset</button>
+        <button class="tab" data-tab="advanced">Advanced</button>
+      </nav>
+
+      <div class="tab-body">
+        <!-- ===== EQ TAB ===== -->
+        <div class="tab-pane active" data-pane="eq">
+          <div class="eq-toolbar">
+            <div class="eq-channel-select" id="eqChannelSelect">
+              <button class="ch-pill active" data-ch="sub" style="--c:var(--sub)">SUB</button>
+              <button class="ch-pill" data-ch="low" style="--c:var(--low)">LOW</button>
+              <button class="ch-pill" data-ch="mid" style="--c:var(--mid)">MID</button>
+              <button class="ch-pill" data-ch="high" style="--c:var(--high)">HIGH</button>
+              <button class="ch-pill" data-ch="master" style="--c:var(--master)">MASTER</button>
+            </div>
+            <div class="eq-tools">
+              <select id="eqFilterType" class="mini-select" title="Tipe filter node baru">
+                <option value="peaking">Bell</option>
+                <option value="highpass">High Pass</option>
+                <option value="lowpass">Low Pass</option>
+                <option value="lowshelf">Low Shelf</option>
+                <option value="highshelf">High Shelf</option>
+                <option value="notch">Notch</option>
+                <option value="bandpass">Band Pass</option>
+              </select>
+              <button class="btn btn-ghost" id="eqResetBtn">Reset EQ</button>
+            </div>
+          </div>
+          <div class="eq-stage">
+            <canvas id="eqCanvas"></canvas>
+            <div class="eq-hint">Klik 2x area kosong = tambah node · Drag = geser · Scroll di node = ubah Q · Klik 2x node = hapus</div>
+          </div>
+          <div class="eq-readout" id="eqReadout">
+            <span>Node: <b id="roSel">–</b></span>
+            <span>Freq: <b id="roFreq">–</b></span>
+            <span>Gain: <b id="roGain">–</b></span>
+            <span>Q: <b id="roQ">–</b></span>
+          </div>
+        </div>
+
+        <!-- ===== ANALYZER TAB ===== -->
+        <div class="tab-pane" data-pane="analyzer">
+          <div class="analyzer-stage">
+            <canvas id="bigAnalyzer"></canvas>
+          </div>
+          <div class="analyzer-legend">
+            <span><i style="background:var(--sub)"></i>SUB 20–80Hz</span>
+            <span><i style="background:var(--low)"></i>LOW 80–250Hz</span>
+            <span><i style="background:var(--mid)"></i>MID 250Hz–4kHz</span>
+            <span><i style="background:var(--high)"></i>HIGH 4k–20kHz</span>
+          </div>
+        </div>
+
+        <!-- ===== MASTER TAB ===== -->
+        <div class="tab-pane" data-pane="master">
+          <div class="master-rack" id="masterRack">
+            <!-- knobs injected -->
+          </div>
+        </div>
+
+        <!-- ===== PRESET TAB ===== -->
+        <div class="tab-pane" data-pane="preset">
+          <div class="preset-toolbar">
+            <button class="btn btn-accent" id="savePresetBtn">Simpan Preset</button>
+            <button class="btn btn-ghost" id="exportPresetBtn">Export</button>
+            <label class="btn btn-ghost" for="importPresetInput">Import</label>
+            <input type="file" id="importPresetInput" accept="application/json" hidden />
+          </div>
+          <div class="preset-grid" id="presetGrid"><!-- preset cards --></div>
+        </div>
+
+        <!-- ===== ADVANCED TAB ===== -->
+        <div class="tab-pane" data-pane="advanced">
+          <div class="adv-grid">
+            <div class="adv-card">
+              <h3>Engine</h3>
+              <div class="adv-row"><span>Sample Rate</span><b id="advSR">–</b></div>
+              <div class="adv-row"><span>Buffer Mode</span><b id="advBuf">High Quality</b></div>
+              <div class="adv-row"><span>Base Latency</span><b id="advLat">–</b></div>
+              <div class="adv-row"><span>Channels</span><b>4-band + Master</b></div>
+            </div>
+            <div class="adv-card">
+              <h3>Crossover (Linkwitz-Riley 4th)</h3>
+              <div class="adv-row"><span>SUB / LOW</span><b><span id="advX1">80</span> Hz</b></div>
+              <div class="adv-row"><span>LOW / MID</span><b><span id="advX2">250</span> Hz</b></div>
+              <div class="adv-row"><span>MID / HIGH</span><b><span id="advX3">4000</span> Hz</b></div>
+            </div>
+            <div class="adv-card">
+              <h3>Tips Tuning</h3>
+              <ul class="adv-tips">
+                <li>80Hz over = bass berlebihan, kecilin SUB.</li>
+                <li>200Hz over = muddy, kecilin LOW.</li>
+                <li>3kHz over = cempreng, kecilin MID.</li>
+                <li>8kHz+ over = nusuk, kecilin HIGH.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- RIGHT: CHANNEL RACK ---------- -->
+    <aside class="panel rack-panel">
+      <div class="panel-head">
+        <h2>Channel DSP</h2>
+        <span class="hint-pill" id="soloHint">—</span>
+      </div>
+      <div class="rack" id="channelRack"><!-- channel strips injected --></div>
+    </aside>
+  </main>
+
+  <audio id="audioEl" crossorigin="anonymous"></audio>
+
+  <!-- Scripts (load order matters: no ES modules so it works from file://) -->
+  <script src="js/audio-engine.js"></script>
+  <script src="js/eq-curve.js"></script>
+  <script src="js/analyzer.js"></script>
+  <script src="js/waveform.js"></script>
+  <script src="js/playlist.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/preset.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
