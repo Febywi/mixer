@@ -103,6 +103,7 @@
       this.newType = "peaking";
       this.selected = null;       // band id
       this.dragging = null;
+      this._pendingCreate = null;
       this.onChange = null;       // (band) => {}
       this.onSelect = null;       // (band|null) => {}
 
@@ -143,9 +144,13 @@
 
     _bind() {
       const c = this.canvas;
+      c.style.touchAction = "none";          // prevent browser gesture hijack while dragging
+      c.style.cursor = "crosshair";
       c.addEventListener("pointerdown", (e) => this._onDown(e));
-      window.addEventListener("pointermove", (e) => this._onMove(e));
-      window.addEventListener("pointerup", () => this._onUp());
+      c.addEventListener("pointermove", (e) => this._onMove(e));
+      c.addEventListener("pointerup", (e) => this._onUp(e));
+      c.addEventListener("pointercancel", (e) => this._onUp(e));
+      c.addEventListener("pointerleave", (e) => this._onUp(e));
       c.addEventListener("dblclick", (e) => this._onDbl(e));
       c.addEventListener("wheel", (e) => this._onWheel(e), { passive: false });
       c.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -157,7 +162,7 @@
     }
     _hit(x, y) {
       if (!this.eq) return null;
-      let best = null, bd = 14;
+      let best = null, bd = 18;   // generous grab radius
       this.eq.bands.forEach((b) => {
         const bx = this._freqToX(b.freq);
         const by = GAIN_TYPES.includes(b.type) ? this._gainToY(b.gain) : this._gainToY(0);
@@ -169,27 +174,50 @@
 
     _onDown(e) {
       if (!this.eq) return;
+      try { this.canvas.setPointerCapture(e.pointerId); } catch (x) {}
       const { x, y } = this._pos(e);
       const b = this._hit(x, y);
       if (b) {
-        this.selected = b.id; this.dragging = b;
+        // grab existing node and drag it
+        this.selected = b.id; this.dragging = b; this._pendingCreate = null;
         if (this.onSelect) this.onSelect(b);
       } else {
-        this.selected = null;
+        // remember spot: a drag here will create + drag a new node
+        this._pendingCreate = { x, y };
+        this.dragging = null; this.selected = null;
         if (this.onSelect) this.onSelect(null);
       }
     }
     _onMove(e) {
-      if (!this.dragging) return;
+      if (!this.eq) return;
       const { x, y } = this._pos(e);
+
+      // start creating a node when dragging from empty space (FabFilter-style)
+      if (!this.dragging && this._pendingCreate) {
+        if (Math.hypot(x - this._pendingCreate.x, y - this._pendingCreate.y) > 3) {
+          const nb = this._createAt(this._pendingCreate.x, this._pendingCreate.y);
+          this.selected = nb.id; this.dragging = nb; this._pendingCreate = null;
+          if (this.onSelect) this.onSelect(nb);
+        }
+      }
+
+      if (!this.dragging) return;
       const b = this.dragging;
-      const freq = Math.max(FMIN, Math.min(FMAX, this._xToFreq(x)));
-      const p = { freq };
+      const p = { freq: Math.max(FMIN, Math.min(FMAX, this._xToFreq(x))) };
       if (GAIN_TYPES.includes(b.type)) p.gain = Math.max(-DB_RANGE, Math.min(DB_RANGE, this._yToGain(y)));
       this.eq.updateBand(b.id, p);
       if (this.onChange) this.onChange(b);
     }
-    _onUp() { this.dragging = null; }
+    _onUp(e) {
+      if (e && e.pointerId != null) { try { this.canvas.releasePointerCapture(e.pointerId); } catch (x) {} }
+      this.dragging = null; this._pendingCreate = null;
+    }
+
+    _createAt(px, py) {
+      const freq = Math.max(FMIN, Math.min(FMAX, this._xToFreq(px)));
+      const gain = GAIN_TYPES.includes(this.newType) ? Math.max(-DB_RANGE, Math.min(DB_RANGE, this._yToGain(py))) : 0;
+      return this.eq.addBand({ type: this.newType, freq, gain, q: 1 });
+    }
 
     _onDbl(e) {
       if (!this.eq) return;
@@ -197,14 +225,12 @@
       const b = this._hit(x, y);
       if (b) {
         this.eq.removeBand(b.id);
-        this.selected = null;
+        this.selected = null; this.dragging = null; this._pendingCreate = null;
         if (this.onSelect) this.onSelect(null);
         if (this.onChange) this.onChange(null);
       } else {
-        const freq = Math.max(FMIN, Math.min(FMAX, this._xToFreq(x)));
-        const gain = GAIN_TYPES.includes(this.newType) ? Math.max(-DB_RANGE, Math.min(DB_RANGE, this._yToGain(y))) : 0;
-        const nb = this.eq.addBand({ type: this.newType, freq, gain, q: 1 });
-        this.selected = nb.id;
+        const nb = this._createAt(x, y);
+        this.selected = nb.id; this._pendingCreate = null;
         if (this.onSelect) this.onSelect(nb);
         if (this.onChange) this.onChange(nb);
       }
@@ -284,11 +310,13 @@
           const bx = this._freqToX(b.freq);
           const by = GAIN_TYPES.includes(b.type) ? this._gainToY(b.gain) : this._gainToY(0);
           const sel = b.id === this.selected;
-          g.beginPath(); g.arc(bx, by, sel ? 7 : 5, 0, Math.PI * 2);
+          g.beginPath(); g.arc(bx, by, sel ? 8 : 6, 0, Math.PI * 2);
           g.fillStyle = sel ? "#fff" : this.accent;
-          g.shadowColor = this.accent; g.shadowBlur = sel ? 12 : 6;
+          g.shadowColor = this.accent; g.shadowBlur = sel ? 14 : 8;
           g.fill(); g.shadowBlur = 0;
-          if (sel) { g.strokeStyle = this.accent; g.lineWidth = 2; g.beginPath(); g.arc(bx, by, 11, 0, Math.PI * 2); g.stroke(); }
+          // outer ring so empty-EQ nodes are easy to spot/grab
+          g.strokeStyle = this.accent; g.lineWidth = sel ? 2 : 1.5;
+          g.beginPath(); g.arc(bx, by, sel ? 12 : 9, 0, Math.PI * 2); g.stroke();
         });
       }
     }

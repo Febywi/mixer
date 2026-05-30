@@ -244,6 +244,33 @@ if(!err){
     fire(registry.btnRepeat, "click", {});
     fire(registry.btnRepeat, "click", {});
     ok(true, "transport buttons fire without error");
+
+    /* ---- EQ interaction: drag on empty creates + drags a node ---- */
+    const eqEditor = window.NEXUS.eqEditor;
+    // rebind to SUB channel (starts empty) and ensure sized
+    window.NEXUS.ui.bindEQChannel("sub");
+    eqEditor.resize();
+    const subEq = window.NEXUS.engine.channels.sub.eq;
+    const before = subEq.bands.length;
+    const cv = eqEditor.canvas;
+    fire(cv, "pointerdown", { clientX: 100, clientY: 80, pointerId: 7 });
+    fire(cv, "pointermove", { clientX: 140, clientY: 50, pointerId: 7 }); // drag > threshold
+    ok(subEq.bands.length === before + 1, "EQ drag on empty creates a node");
+    const created = subEq.bands[subEq.bands.length - 1];
+    const f1 = created.freq;
+    fire(cv, "pointermove", { clientX: 220, clientY: 60, pointerId: 7 }); // keep dragging
+    ok(created.freq !== f1, "EQ node freq changes while dragging");
+    fire(cv, "pointerup", { pointerId: 7 });
+    ok(eqEditor.dragging === null, "drag released");
+    // grab existing node and drag it
+    const bx = eqEditor._freqToX(created.freq), by = eqEditor._gainToY(created.gain);
+    const r = cv.getBoundingClientRect();
+    fire(cv, "pointerdown", { clientX: r.left + bx, clientY: r.top + by, pointerId: 8 });
+    ok(eqEditor.dragging && eqEditor.dragging.id === created.id, "pointerdown on existing node grabs it for drag");
+    fire(cv, "pointerup", { pointerId: 8 });
+    // double-click removes
+    fire(cv, "dblclick", { clientX: r.left + eqEditor._freqToX(created.freq), clientY: r.top + eqEditor._gainToY(created.gain) });
+    ok(subEq.bands.length === before, "double-click on node removes it");
   } catch(e){ ok(false, "interaction sim threw -> "+e.stack); }
 }
 

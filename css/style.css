@@ -231,7 +231,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .mini-select:focus { outline: none; border-color: rgba(34,211,238,.5); }
 
 .eq-stage { position: relative; flex: 1; min-height: 0; border-radius: var(--radius-sm); background: var(--bg-2); border: 1px solid var(--line); overflow: hidden; }
-.eq-stage canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+.eq-stage canvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
 .eq-hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--txt-faint); background: rgba(11,13,16,.7); padding: 4px 10px; border-radius: 20px; pointer-events: none; white-space: nowrap; }
 .eq-readout { display: flex; gap: 18px; font-size: 12px; color: var(--txt-dim); font-family: var(--mono); flex: 0 0 auto; padding: 0 2px; }
 .eq-readout b { color: var(--txt); }
